@@ -1,94 +1,197 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Sports Story Generator</title>
-  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="css/styles.css"/>
 </head>
 <body>
 
-  <!-- ===== APP SHELL ===== -->
-  <div id="app">
+<!-- ═══════════════════════════════════════
+     SITE SHELL
+═══════════════════════════════════════ -->
+<div id="site">
 
-    <!-- Background: Addictive catch-the-balls game on canvas -->
-    <canvas id="bgCanvas"></canvas>
-
-    <!-- Gradient vignette over the canvas -->
-    <div id="vignette"></div>
-
-    <!-- ===== SPORT SELECTOR BAR ===== -->
-    <div id="sportBar">
-      <button class="sportBtn active" data-sport="all">🏆 All</button>
-      <button class="sportBtn" data-sport="football">🏈 NFL</button>
-      <button class="sportBtn" data-sport="basketball">🏀 NBA</button>
-      <button class="sportBtn" data-sport="baseball">⚾ MLB</button>
-      <button class="sportBtn" data-sport="soccer">⚽ Soccer</button>
-      <button class="sportBtn" data-sport="golf">⛳ Golf</button>
-      <button class="sportBtn" data-sport="f1">🏎️ F1</button>
+  <!-- HEADER -->
+  <header id="siteHeader">
+    <div class="headerLogo">
+      <span class="logoIcon">🏆</span>
+      <div>
+        <div class="logoTitle">Sports Story Generator</div>
+        <div class="logoSub">TikTok · Reels · Shorts</div>
+      </div>
     </div>
+    <button id="settingsBtn" class="ghostBtn">⚙️ API Key</button>
+  </header>
 
-    <!-- ===== VIDEO OVERLAY ===== -->
-    <div id="videoOverlay">
+  <!-- MAIN -->
+  <main id="siteMain">
 
-      <!-- Sport badge top-left -->
-      <div id="sportBadge">
-        <span id="badgeEmoji">🏆</span>
-        <span id="badgeName">Sports</span>
-        <span id="badgeYear"></span>
+    <!-- ══ LEFT: Phone preview ══ -->
+    <section id="previewPanel">
+      <div id="phoneWrap">
+        <!-- Phone chrome -->
+        <div id="phoneBezels">
+          <div id="phoneNotch"></div>
+        </div>
+
+        <!-- The actual video viewport -->
+        <div id="videoViewport">
+          <!-- Canvas renders at 540×960, CSS scales to preview size -->
+          <canvas id="bgCanvas" width="540" height="960"></canvas>
+
+          <!-- Vignette -->
+          <div id="vignette"></div>
+
+          <!-- Overlays (sport badge, title, captions, progress) -->
+          <div id="videoOverlay">
+
+            <div id="sportBadge">
+              <span id="badgeEmoji">🏆</span>
+              <span id="badgeName">Sport</span>
+              <span id="badgeYear"></span>
+            </div>
+
+            <div id="sourceChip"><span id="sourceLabel">📰 Sports History</span></div>
+
+            <div id="overlayBottom">
+              <div id="storyTitleEl">Press Generate to begin</div>
+
+              <div id="captionBar">
+                <div id="captionText"></div>
+              </div>
+
+              <div id="progressWrap">
+                <div id="progressBar"><div id="progressFill"></div></div>
+                <div id="timeLabel">0:00 / 0:00</div>
+              </div>
+            </div>
+
+          </div><!-- /videoOverlay -->
+
+          <!-- Recording indicator -->
+          <div id="recIndicator" class="hidden">
+            <span class="recDot"></span> REC
+          </div>
+        </div><!-- /videoViewport -->
+
+        <!-- Bottom home bar -->
+        <div id="phoneHomeBar"></div>
+      </div><!-- /phoneWrap -->
+
+      <!-- Platform selector -->
+      <div id="platformRow">
+        <button class="platBtn active" data-plat="tiktok">
+          <span>TikTok</span>
+        </button>
+        <button class="platBtn" data-plat="reels">
+          <span>Reels</span>
+        </button>
+        <button class="platBtn" data-plat="shorts">
+          <span>Shorts</span>
+        </button>
       </div>
+    </section>
 
-      <!-- Live / Source chip top-right -->
-      <div id="sourceChip">
-        <span id="sourceLabel">📰 Featured Story</span>
+    <!-- ══ RIGHT: Controls ══ -->
+    <section id="controlPanel">
+      <div id="controlInner">
+
+        <h2 class="panelTitle">Generate Your Story Video</h2>
+
+        <!-- Sport selector -->
+        <div class="controlGroup">
+          <label class="groupLabel">Sport</label>
+          <div id="sportBar">
+            <button class="sportBtn active" data-sport="all">🏆 All</button>
+            <button class="sportBtn" data-sport="football">🏈 NFL</button>
+            <button class="sportBtn" data-sport="basketball">🏀 NBA</button>
+            <button class="sportBtn" data-sport="baseball">⚾ MLB</button>
+            <button class="sportBtn" data-sport="soccer">⚽ Soccer</button>
+            <button class="sportBtn" data-sport="golf">⛳ Golf</button>
+            <button class="sportBtn" data-sport="f1">🏎️ F1</button>
+          </div>
+        </div>
+
+        <!-- Voice selector -->
+        <div class="controlGroup">
+          <label class="groupLabel">Voice</label>
+          <select id="voiceSelect" class="selectInput">
+            <option value="onwK4e9ZLuTAKqWW03F9">Daniel — British Male (Warm)</option>
+            <option value="JBFqnCBsd6RMkjVDRZzb">George — British Male (Deep)</option>
+            <option value="IKne3meq5aSn9XLyUdCD">Charlie — British Male (Casual)</option>
+            <option value="browser">Browser TTS (no API key needed)</option>
+          </select>
+        </div>
+
+        <!-- Story preview card -->
+        <div id="storyCard" class="controlGroup">
+          <label class="groupLabel">Story Preview</label>
+          <div id="storyCardInner">
+            <div id="storyCardTitle">—</div>
+            <div id="storyCardSport"></div>
+            <div id="storyCardText">Click Generate to load a story.</div>
+          </div>
+        </div>
+
+        <!-- Status -->
+        <div id="statusBar" class="hidden">
+          <div class="statusSpinner"></div>
+          <span id="statusMsg">Working…</span>
+        </div>
+
+        <!-- Action buttons -->
+        <div id="actionBtns">
+          <button id="generateBtn" class="btn btnPrimary">⚡ Generate Story</button>
+          <button id="recordBtn"   class="btn btnAccent"   disabled>🎬 Record Video</button>
+          <button id="downloadBtn" class="btn btnGhost"    disabled>⬇ Download</button>
+        </div>
+
+        <!-- Tips -->
+        <div id="tipsBox">
+          <p>🎮 <b>While recording:</b> Click preview to jump in the game!</p>
+          <p>📱 Output: <b>9:16 vertical, 540×960</b> — ready for TikTok, Reels &amp; Shorts.</p>
+          <p>🔑 For the human British voice, add your free <a href="https://elevenlabs.io" target="_blank" rel="noopener">ElevenLabs API key</a> via ⚙️ above.</p>
+        </div>
+
       </div>
+    </section>
 
-      <!-- Title card -->
-      <div id="titleCard">
-        <div id="storyTitle">Press Generate to Start</div>
-      </div>
+  </main>
+</div>
 
-      <!-- Caption bar — synced to TTS -->
-      <div id="captionBar">
-        <div id="captionText"></div>
-      </div>
-
-      <!-- Progress bar -->
-      <div id="progressWrap">
-        <div id="progressBar"></div>
-        <div id="timeLabel">0:00 / 1:00</div>
-      </div>
-
-      <!-- Controls -->
-      <div id="controls">
-        <button id="generateBtn" class="ctaBtn">⚡ Generate Story</button>
-        <button id="playPauseBtn" class="iconBtn" disabled>▶</button>
-        <button id="replayBtn"    class="iconBtn" disabled>↺</button>
-        <button id="muteBtn"      class="iconBtn">🔊</button>
-        <button id="skipBtn"      class="iconBtn" disabled>⏭</button>
-      </div>
-
+<!-- ═══════════════════════════════════════
+     SETTINGS MODAL
+═══════════════════════════════════════ -->
+<div id="settingsModal" class="modalBackdrop hidden">
+  <div class="modalBox">
+    <div class="modalHeader">
+      <h3>ElevenLabs API Key</h3>
+      <button id="closeSettingsBtn" class="closeBtn">✕</button>
     </div>
-
-    <!-- ===== GAME SCORE HUD ===== -->
-    <div id="scoreHUD">
-      <div id="scoreLabel">SCORE</div>
-      <div id="scoreValue">0</div>
+    <p class="modalDesc">
+      Get a <b>free key</b> at <a href="https://elevenlabs.io/sign-up" target="_blank" rel="noopener">elevenlabs.io</a>
+      (10,000 characters/month free — about 30–40 story videos).
+      Without a key, the browser's built-in TTS voice is used instead.
+    </p>
+    <input id="apiKeyInput" class="textInput" type="password" placeholder="sk-...your-api-key..."/>
+    <div class="modalActions">
+      <button id="saveKeyBtn"   class="btn btnPrimary">Save Key</button>
+      <button id="clearKeyBtn"  class="btn btnGhost">Clear Key</button>
     </div>
-
-    <!-- ===== LOADING SCREEN ===== -->
-    <div id="loadingScreen">
-      <div class="spinner"></div>
-      <div id="loadingText">Fetching story…</div>
-    </div>
-
+    <div id="keyStatus"></div>
   </div>
+</div>
 
-  <!-- Scripts — order matters -->
-  <script src="js/stories.js"></script>
-  <script src="js/game.js"></script>
-  <script src="js/tts.js"></script>
-  <script src="js/app.js"></script>
-
+<!-- Scripts -->
+<script src="js/stories.js"></script>
+<script src="js/game.js"></script>
+<script src="js/elevenlabs.js"></script>
+<script src="js/recorder.js"></script>
+<script src="js/app.js"></script>
 </body>
 </html>

@@ -1,397 +1,349 @@
-/* =============================================
-   GAME.JS — Subway Surfers-Style Endless Runner
-   ─────────────────────────────────────────────
-   A full parallax endless runner with:
-   • 3 scrolling background layers (sky/stands, field, ground)
-   • Running athlete character with jump + slide
-   • Obstacles scrolling from right (hurdles, barriers, cones)
-   • Collectible coins/balls that boost score
-   • Increasing speed over time
-   • Space / click / tap = jump; Down / swipe down = slide
-   Lives system (3 lives — hits make char flash, not game over)
-   so it never interrupts the story narration.
-   ============================================= */
+/* ============================================================
+   GAME.JS — Pseudo-3D Perspective Endless Runner
+   ─────────────────────────────────────────────────────────
+   Subway Surfers-style top-down 3/4 perspective view:
+   • Vanishing point at centre-top
+   • Three lanes converging at horizon
+   • Character runs in the centre lane, swaps left/right
+   • Obstacles grow from tiny (far) to large (near)
+   • Coins float above track, collected as player passes
+   • Parallax city silhouette in background
+   • Neon-lit night aesthetic
+   Controls: ←→ / A D = lane swap   Space / Up = jump
+   ============================================================ */
 
 'use strict';
 
 (function () {
 
+  /* ── Canvas ── */
   const canvas = document.getElementById('bgCanvas');
   const ctx    = canvas.getContext('2d');
-  let W, H, GROUND_Y;
+  const CW = 540, CH = 960;   // canvas native resolution
 
-  function resize() {
-    const app = document.getElementById('app');
-    W = canvas.width  = app.clientWidth  || 390;
-    H = canvas.height = app.clientHeight || 844;
-    GROUND_Y = H * 0.72;
+  /* ── Perspective constants ── */
+  const VP   = { x: CW / 2, y: CH * 0.34 };   // vanishing point
+  const GND  = CH - 40;                         // ground baseline
+  const LANE_SPREAD = CW * 0.28;                // half-width of all lanes at ground
+
+  /* Lane centres at ground level */
+  const LANES = [-1, 0, 1];
+  function laneX(lane) { return VP.x + lane * LANE_SPREAD; }
+
+  /* Project a world position to screen:
+     lane  : -1 | 0 | 1
+     depth : 0 (player, bottom) → 1 (horizon, top)  */
+  function project(lane, depth) {
+    const t  = 1 - depth;            // 0=horizon, 1=player
+    const x  = VP.x + lane * LANE_SPREAD * t;
+    const y  = VP.y + (GND - VP.y) * t;
+    const sc = t;
+    return { x, y, sc };
   }
-  window.addEventListener('resize', resize);
-  resize();
 
-  /* ─────────────────── CONSTANTS ─────────────── */
-  const GRAVITY    = 0.55;
-  const JUMP_VY    = -13;
-  const BASE_SPEED = 4;
-  const CHAR_X     = 80;
-  const CHAR_W     = 34;
-  const CHAR_H     = 50;
-
-  /* ─────────────────── STATE ─────────────────── */
-  let speed       = BASE_SPEED;
-  let frameCount  = 0;
+  /* ── State ── */
+  let frame       = 0;
+  let speed       = 0.012;    // depth units consumed per frame
   let score       = 0;
-  let lives       = 3;
-  let invincible  = 0;   // frames of invincibility after hit
   let running     = true;
+  let playerLane  = 0;        // -1 | 0 | 1
+  let playerJump  = 0;        // jump height above ground (0 = on ground)
+  let jumpVel     = 0;
+  let invincible  = 0;
+  let lives       = 3;
 
-  /* ─────────────────── CHAR ───────────────────── */
-  const char = {
-    y:       GROUND_Y - CHAR_H,
-    vy:      0,
-    isJump:  false,
-    isSlide: false,
-    slideT:  0,
-    animT:   0,
-  };
-  function resetCharY() { char.y = GROUND_Y - CHAR_H; char.vy = 0; char.isJump = false; }
+  /* Track scrolling offset (0..1 repeating) */
+  let trackOff = 0;
 
-  /* ─────────────────── JUMP / SLIDE ──────────── */
-  function tryJump() {
-    if (!char.isJump) {
-      char.vy     = JUMP_VY;
-      char.isJump = true;
-      char.isSlide= false;
-    }
-  }
-  function trySlide() {
-    if (!char.isJump) {
-      char.isSlide = true;
-      char.slideT  = 28;
-    }
-  }
+  /* City scroll */
+  let cityOff = 0;
 
-  canvas.addEventListener('click',     tryJump);
-  canvas.addEventListener('touchstart', e => { e.preventDefault(); tryJump(); }, { passive: false });
+  const obstacles = [];
+  const coins     = [];
+  const particles = [];
+  let spawnCD     = 60;
+
+  /* ── Controls ── */
   document.addEventListener('keydown', e => {
-    if (e.code === 'Space' || e.code === 'ArrowUp')   { e.preventDefault(); tryJump();  }
-    if (e.code === 'ArrowDown' || e.code === 'KeyS')  { e.preventDefault(); trySlide(); }
+    if (e.code === 'ArrowLeft'  || e.code === 'KeyA') moveLane(-1);
+    if (e.code === 'ArrowRight' || e.code === 'KeyD') moveLane(1);
+    if (e.code === 'Space' || e.code === 'ArrowUp')   { e.preventDefault(); doJump(); }
   });
 
-  /* ─────────────────── PARALLAX LAYERS ────────── */
-  /* Each layer has tiles that scroll at a different speed */
+  /* Touch swipe */
+  let touchStartX = null;
+  canvas.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; }, { passive: true });
+  canvas.addEventListener('touchend',   e => {
+    if (touchStartX === null) return;
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    if (Math.abs(dx) < 20) { doJump(); }
+    else if (dx < 0) moveLane(-1);
+    else             moveLane(1);
+    touchStartX = null;
+  });
+  canvas.addEventListener('click', doJump);
 
-  // Layer 0 — Sky gradient + stadium crowd silhouette
-  // Layer 1 — Midground: field stripes
-  // Layer 2 — Foreground: ground track
-
-  const layers = [
-    { speed: 0.3, x: 0 },   // sky
-    { speed: 1.0, x: 0 },   // mid
-    { speed: 2.5, x: 0 },   // near ground detail
-  ];
-
-  /* ─────────────────── OBSTACLES ─────────────── */
-  const OBS_TYPES = [
-    { key: 'hurdle',   emoji: '🚧', w: 22, h: 40, gy: 0,  points: 0,  safe: false },
-    { key: 'cone',     emoji: '🔺', w: 24, h: 30, gy: 0,  points: 0,  safe: false },
-    { key: 'barrier',  emoji: '🛑', w: 26, h: 44, gy: 0,  points: 0,  safe: false },
-    { key: 'low_bar',  emoji: '━━', w: 50, h: 16, gy: -14,points: 0,  safe: false },  // slide under
-  ];
-  const COIN_TYPES = [
-    { emoji: '🏈', points: 15 },
-    { emoji: '🏀', points: 15 },
-    { emoji: '⚽', points: 15 },
-    { emoji: '⭐', points: 25 },
-    { emoji: '💰', points: 30 },
-  ];
-
-  let obstacles = [];
-  let coins     = [];
-  let particles = [];
-  let spawnCD   = 80;
-
-  /* ─────────────────── SPAWN ──────────────────── */
-  function spawnNext() {
-    if (Math.random() < 0.6) {
-      // obstacle
-      const t  = OBS_TYPES[Math.floor(Math.random() * OBS_TYPES.length)];
-      obstacles.push({
-        x: W + 20,
-        y: GROUND_Y - t.h + (t.gy || 0),
-        w: t.w, h: t.h,
-        emoji: t.emoji,
-        safe: t.safe,
-        low: t.gy < 0,   // must slide under
-      });
-    } else {
-      // coin
-      const c = COIN_TYPES[Math.floor(Math.random() * COIN_TYPES.length)];
-      const floatH = 20 + Math.random() * 60;
-      coins.push({
-        x: W + 20,
-        y: GROUND_Y - CHAR_H - floatH,
-        emoji: c.emoji,
-        points: c.points,
-        r: 16,
-        bob: Math.random() * Math.PI * 2,
-      });
-    }
+  function moveLane(dir) {
+    playerLane = Math.max(-1, Math.min(1, playerLane + dir));
+  }
+  function doJump() {
+    if (playerJump === 0) { jumpVel = -18; }
   }
 
-  /* ─────────────────── HIT FLASH ─────────────── */
-  function takeHit() {
-    if (invincible > 0) return;
-    lives = Math.max(0, lives - 1);
-    invincible = 80;
-    if (lives === 0) {
-      lives = 3;   // respawn — never end, just penalise
-      score = Math.max(0, score - 50);
-      updateHUD();
-    }
-    updateHUD();
+  /* ── Spawn obstacles / coins ── */
+  const OBS_SHAPES = [
+    { color: '#e8002d', label: '🚧', h: 0.08 },
+    { color: '#ff9900', label: '⚠', h: 0.05 },
+    { color: '#00bfff', label: '🛑', h: 0.09 },
+  ];
+  const COIN_SPORTS = ['🏈','🏀','⚾','⚽','⛳','💰','⭐'];
+
+  function spawnObstacle() {
+    const lane  = LANES[Math.floor(Math.random() * 3)];
+    const shape = OBS_SHAPES[Math.floor(Math.random() * OBS_SHAPES.length)];
+    obstacles.push({ lane, depth: 0.98, shape, alive: true });
   }
 
-  /* ─────────────────── PARTICLES ─────────────── */
-  function burst(x, y, color, count = 10) {
-    for (let i = 0; i < count; i++) {
+  function spawnCoin() {
+    const lane  = LANES[Math.floor(Math.random() * 3)];
+    const emoji = COIN_SPORTS[Math.floor(Math.random() * COIN_SPORTS.length)];
+    coins.push({ lane, depth: 0.96, emoji, alive: true, pts: emoji === '⭐' || emoji === '💰' ? 25 : 10 });
+  }
+
+  /* ── Particles ── */
+  function burst(x, y, color, n = 12) {
+    for (let i = 0; i < n; i++) {
       const a = Math.random() * Math.PI * 2;
-      const s = 2 + Math.random() * 4;
-      particles.push({ x, y, vx: Math.cos(a)*s, vy: Math.sin(a)*s - 2,
-                        life: 1, decay: .04, r: 3 + Math.random()*3, color });
+      const s = 2 + Math.random() * 5;
+      particles.push({ x, y, vx: Math.cos(a)*s, vy: Math.sin(a)*s - 3,
+        r: 3 + Math.random()*4, color, life: 1, dec: .03 + Math.random()*.02 });
     }
   }
 
-  /* ─────────────────── HUD ────────────────────── */
+  function scorePop(x, y, text) {
+    const rect = canvas.getBoundingClientRect();
+    const sx = rect.left + x * (rect.width / CW);
+    const sy = rect.top  + y * (rect.height / CH);
+    const el = document.createElement('div');
+    el.className = 'scorePop';
+    el.textContent = text;
+    el.style.left = sx + 'px'; el.style.top = sy + 'px';
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 920);
+  }
+
   function updateHUD() {
     const sv = document.getElementById('scoreValue');
     if (sv) sv.textContent = score;
   }
 
-  /* ─────────────────── SCORE POP ─────────────── */
-  function scorePop(x, y, text) {
-    const rect = canvas.getBoundingClientRect();
-    const sx = rect.left + x * (rect.width / W);
-    const sy = rect.top  + y * (rect.height / H);
-    const el = document.createElement('div');
-    el.className  = 'scorePop';
-    el.textContent = text;
-    el.style.left = sx + 'px';
-    el.style.top  = sy + 'px';
-    document.body.appendChild(el);
-    setTimeout(() => el.remove(), 920);
+  /* ── Background ── */
+  function drawSky() {
+    const g = ctx.createLinearGradient(0, 0, 0, VP.y + 60);
+    g.addColorStop(0,   '#06060f');
+    g.addColorStop(0.5, '#0b0b1e');
+    g.addColorStop(1,   '#12122a');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, CW, VP.y + 60);
   }
 
-  /* ─────────────────── DRAW BACKGROUND ───────── */
-  const NEON_COLORS = ['#ff6b35','#00e5ff','#ffe500','#00ff9d','#ff4dff'];
-  let neonT = 0;
-
-  function drawBG() {
-    // Sky gradient
-    const sky = ctx.createLinearGradient(0, 0, 0, H * 0.65);
-    sky.addColorStop(0,   '#0b0b1e');
-    sky.addColorStop(0.5, '#12122e');
-    sky.addColorStop(1,   '#0e1a2b');
-    ctx.fillStyle = sky;
-    ctx.fillRect(0, 0, W, H);
-
-    // Stars (static)
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    for (let i = 0; i < 40; i++) {
-      // deterministic positions using index as seed
-      const sx = (((i * 137 + 17) % 100) / 100) * W;
-      const sy = (((i * 97  + 31) % 60)  / 100) * H;
-      ctx.fillRect(sx, sy, 1.5, 1.5);
-    }
-
-    // Neon pulsing circles (stadium flood lights vibe)
-    neonT += 0.015;
-    for (let i = 0; i < 3; i++) {
-      const col  = NEON_COLORS[i % NEON_COLORS.length];
-      const px   = W * (0.2 + i * 0.3);
-      const py   = H * 0.08;
-      const glow = ctx.createRadialGradient(px, py, 0, px, py, 120);
-      const alp  = 0.04 + 0.025 * Math.sin(neonT + i * 2);
-      glow.addColorStop(0, col.replace(')', `,${alp})`).replace('rgb', 'rgba').replace('#', 'rgba(') );
-      // simpler alpha color:
-      ctx.save();
-      ctx.globalAlpha = alp;
-      ctx.fillStyle   = col;
-      ctx.beginPath();
-      ctx.arc(px, py, 100, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-    }
-
-    // Stadium crowd silhouette (layer 0 parallax)
-    layers[0].x -= speed * 0.3;
-    const TILE_W = 160;
-    if (layers[0].x < -TILE_W) layers[0].x += TILE_W;
-    drawCrowdLayer(layers[0].x);
-
-    // Scrolling field stripes (mid)
-    layers[1].x -= speed * 1.0;
-    if (layers[1].x < -80) layers[1].x += 80;
-    drawFieldStripes(layers[1].x);
-
-    // Ground
-    drawGround();
+  /* Stars (stable) */
+  const STARS = Array.from({ length: 60 }, (_, i) => ({
+    x: (((i * 137 + 19) % 100) / 100) * CW,
+    y: (((i * 97  + 37) % 40)  / 100) * CH,
+    r: 0.8 + (i % 3) * 0.6,
+  }));
+  function drawStars() {
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    STARS.forEach(s => { ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI*2); ctx.fill(); });
   }
 
-  function drawCrowdLayer(offsetX) {
-    // Simple crowd silhouette shapes
-    ctx.save();
-    ctx.fillStyle = 'rgba(30,30,60,0.7)';
-    const tile = 160;
-    for (let tx = offsetX; tx < W + tile; tx += tile) {
-      // stadium bleacher row
-      ctx.beginPath();
-      ctx.moveTo(tx, H * 0.32);
-      for (let i = 0; i < 20; i++) {
-        const hx = tx + i * 8;
-        const hy = H * 0.32 - 8 - (i % 3) * 4 - Math.sin(i * 1.1) * 5;
-        ctx.lineTo(hx, hy);
-        ctx.lineTo(hx + 4, H * 0.32);
+  /* City silhouette (parallax layer) */
+  const BUILDINGS = (() => {
+    const arr = [];
+    let x = 0;
+    while (x < CW * 3) {
+      const w = 40 + Math.random() * 80;
+      const h = 60 + Math.random() * 180;
+      const hasLights = Math.random() > 0.5;
+      arr.push({ x, w, h, hasLights,
+        windowR: Math.random() > .5 ? '#ffee88' : '#88ccff' });
+      x += w + 4 + Math.random() * 20;
+    }
+    return arr;
+  })();
+
+  function drawCity() {
+    cityOff = (cityOff - speed * 30) % (CW * 1.5);
+    const baseY = VP.y + 20;
+    BUILDINGS.forEach(b => {
+      const bx = ((b.x + cityOff) % (CW * 3)) - CW * 0.5;
+      if (bx > CW + 20 || bx + b.w < -20) return;
+      /* building body */
+      ctx.fillStyle = '#15152a';
+      ctx.fillRect(bx, baseY - b.h, b.w, b.h);
+      /* windows */
+      if (b.hasLights) {
+        ctx.fillStyle = b.windowR;
+        ctx.globalAlpha = .3 + .2 * Math.sin(frame * .02 + b.x);
+        for (let wy = baseY - b.h + 8; wy < baseY - 6; wy += 16) {
+          for (let wx = bx + 6; wx < bx + b.w - 6; wx += 14) {
+            ctx.fillRect(wx, wy, 6, 8);
+          }
+        }
+        ctx.globalAlpha = 1;
       }
-      ctx.closePath();
-      ctx.fill();
-    }
-    ctx.restore();
+    });
   }
 
-  function drawFieldStripes(offsetX) {
-    // Horizontal field colour bands
-    const stripeH = H * 0.38;
-    const y0      = H * 0.62 - stripeH;
-    const grad = ctx.createLinearGradient(0, y0, 0, y0 + stripeH);
-    grad.addColorStop(0, 'rgba(0,60,20,0)');
-    grad.addColorStop(1, 'rgba(0,90,30,0.18)');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, y0, W, stripeH);
+  /* Ground */
+  function drawGround() {
+    /* ground fill */
+    const gg = ctx.createLinearGradient(0, VP.y, 0, GND);
+    gg.addColorStop(0, '#0a1810');
+    gg.addColorStop(1, '#0e2018');
+    ctx.fillStyle = gg;
+    ctx.beginPath();
+    ctx.moveTo(0, VP.y);
+    ctx.lineTo(CW, VP.y);
+    ctx.lineTo(CW, GND);
+    ctx.lineTo(0, GND);
+    ctx.closePath();
+    ctx.fill();
 
-    // Vertical yard lines (scrolling)
-    ctx.save();
-    ctx.strokeStyle = 'rgba(255,255,255,0.07)';
-    ctx.lineWidth   = 1;
-    const lineSpacing = 80;
-    for (let lx = offsetX % lineSpacing; lx < W; lx += lineSpacing) {
+    /* horizon glow */
+    const hg = ctx.createLinearGradient(0, VP.y - 10, 0, VP.y + 40);
+    hg.addColorStop(0, 'rgba(0,200,100,0)');
+    hg.addColorStop(0.5,'rgba(0,200,100,.12)');
+    hg.addColorStop(1, 'rgba(0,200,100,0)');
+    ctx.fillStyle = hg;
+    ctx.fillRect(0, VP.y - 10, CW, 50);
+
+    /* Lane dividers — converge to VP */
+    const laneEdges = [-1.5, -0.5, 0.5, 1.5];
+    laneEdges.forEach(le => {
+      const bx = VP.x + le * LANE_SPREAD;
       ctx.beginPath();
-      ctx.moveTo(lx, y0);
-      ctx.lineTo(lx, GROUND_Y);
+      ctx.moveTo(VP.x, VP.y);
+      ctx.lineTo(bx, GND);
+      ctx.strokeStyle = 'rgba(0,255,120,.18)';
+      ctx.lineWidth = (le === -0.5 || le === 0.5) ? 2 : 3;
+      ctx.stroke();
+    });
+
+    /* Horizontal track lines (scrolling toward player) */
+    trackOff = (trackOff + speed) % 0.08;
+    for (let d = trackOff; d < 1; d += 0.08) {
+      const l = project(-1.5, d);
+      const r = project(1.5,  d);
+      ctx.beginPath();
+      ctx.moveTo(l.x, l.y);
+      ctx.lineTo(r.x, r.y);
+      const alpha = (1 - d) * 0.15;
+      ctx.strokeStyle = `rgba(0,255,120,${alpha})`;
+      ctx.lineWidth = (1 - d) * 3;
       ctx.stroke();
     }
-    ctx.restore();
+
+    /* Neon trim at ground level */
+    ctx.beginPath();
+    ctx.moveTo(0, GND); ctx.lineTo(CW, GND);
+    ctx.strokeStyle = 'rgba(0,255,120,.5)';
+    ctx.lineWidth = 2;
+    ctx.shadowColor = '#00ff7a'; ctx.shadowBlur = 10;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
   }
 
-  function drawGround() {
-    // Track surface
-    const grd = ctx.createLinearGradient(0, GROUND_Y, 0, H);
-    grd.addColorStop(0, '#1a3020');
-    grd.addColorStop(0.08, '#13261a');
-    grd.addColorStop(1, '#0a1410');
-    ctx.fillStyle = grd;
-    ctx.fillRect(0, GROUND_Y, W, H - GROUND_Y);
+  /* ── Draw character ── */
+  const RUN_FRAMES = ['🏃', '🏃'];
+  function drawCharacter() {
+    const pos   = project(playerLane, 0.0);
+    const scale = 1.1;
+    const w     = 60 * scale;
+    const jump  = playerJump;
+    const cx    = pos.x;
+    const cy    = GND - 10 - jump;
+    const flash = invincible > 0 && Math.floor(invincible / 4) % 2 === 0;
+    if (flash) return;
 
-    // Ground line (neon trim)
+    /* Shadow */
     ctx.save();
-    ctx.shadowColor = '#00ff9d';
-    ctx.shadowBlur  = 10;
-    ctx.strokeStyle = '#00e87a';
-    ctx.lineWidth   = 2;
+    ctx.globalAlpha = 0.3 - jump * 0.003;
+    ctx.fillStyle = 'rgba(0,0,0,.5)';
     ctx.beginPath();
-    ctx.moveTo(0, GROUND_Y);
-    ctx.lineTo(W, GROUND_Y);
-    ctx.stroke();
-    ctx.restore();
-
-    // Fast lane dashes scrolling
-    layers[2].x -= speed * 2.5;
-    if (layers[2].x < -60) layers[2].x += 60;
-    ctx.save();
-    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-    ctx.lineWidth   = 2;
-    ctx.setLineDash([30, 30]);
-    ctx.lineDashOffset = layers[2].x;
-    ctx.beginPath();
-    ctx.moveTo(0, GROUND_Y + 20);
-    ctx.lineTo(W, GROUND_Y + 20);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.restore();
-  }
-
-  /* ─────────────────── DRAW CHARACTER ─────────── */
-  const SPRITES = ['🏃','🏃‍♂️'];
-  function drawChar() {
-    const isFlash = invincible > 0 && Math.floor(invincible / 5) % 2 === 0;
-    if (isFlash) return;
-
-    const cw = CHAR_W;
-    const ch = char.isSlide ? CHAR_H * 0.5 : CHAR_H;
-    const cy = char.isSlide ? GROUND_Y - ch : char.y;
-
-    char.animT += 0.25;
-
-    ctx.save();
-    ctx.font = `${cw + 10}px serif`;
-    ctx.textAlign    = 'center';
-    ctx.textBaseline = 'bottom';
-
-    // Neon glow around runner
-    ctx.shadowColor  = '#00ff9d';
-    ctx.shadowBlur   = 16;
-
-    // Bounce legs animation when on ground
-    const bounce = char.isJump ? 0 : Math.sin(char.animT * 3) * 2;
-    ctx.fillText(char.isSlide ? '🤸' : '🏃', CHAR_X, cy + ch + bounce);
-    ctx.restore();
-
-    // Shadow under char
-    ctx.save();
-    ctx.globalAlpha = 0.3;
-    ctx.fillStyle   = 'rgba(0,0,0,0.5)';
-    ctx.beginPath();
-    ctx.ellipse(CHAR_X, GROUND_Y + 4, 18, 5, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx, GND - 5, w * 0.5, 10, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
-  }
 
-  /* ─────────────────── DRAW OBSTACLES ─────────── */
-  function drawObstacles() {
-    obstacles.forEach(ob => {
+    /* Character emoji — bounce legs */
+    ctx.save();
+    ctx.font = `${w}px serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.shadowColor  = '#00ff7a';
+    ctx.shadowBlur   = 16;
+    const legBounce = playerJump > 0 ? 0 : Math.sin(frame * 0.25) * 3;
+    ctx.fillText('🏃', cx, cy + legBounce);
+    ctx.restore();
+
+    /* Speed trail */
+    if (speed > 0.016) {
       ctx.save();
-      ctx.font = `${ob.w + 8}px serif`;
-      ctx.textAlign    = 'center';
+      ctx.globalAlpha = 0.12;
+      ctx.font = `${w}px serif`;
+      ctx.textAlign = 'center';
       ctx.textBaseline = 'bottom';
-      ctx.shadowColor  = '#ff4444';
-      ctx.shadowBlur   = 8;
-      ctx.fillText(ob.emoji, ob.x + ob.w / 2, ob.y + ob.h);
+      ctx.fillText('🏃', cx - 20, cy + legBounce + 4);
+      ctx.globalAlpha = 0.06;
+      ctx.fillText('🏃', cx - 38, cy + legBounce + 8);
       ctx.restore();
-    });
+    }
   }
 
-  /* ─────────────────── DRAW COINS ─────────────── */
-  function drawCoins() {
-    const t = Date.now() / 600;
-    coins.forEach(c => {
-      const bobY = c.y + Math.sin(t + c.bob) * 6;
-      ctx.save();
-      ctx.font = '26px serif';
-      ctx.textAlign    = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.shadowColor  = '#ffe500';
-      ctx.shadowBlur   = 14;
-      ctx.fillText(c.emoji, c.x, bobY);
-      ctx.restore();
-    });
+  /* ── Draw obstacles ── */
+  function drawObstacle(ob) {
+    const pos  = project(ob.lane, ob.depth);
+    const size = pos.sc * 80;
+    if (size < 4) return;
+    /* box */
+    ctx.save();
+    ctx.shadowColor = ob.shape.color;
+    ctx.shadowBlur  = 10 * pos.sc;
+    ctx.fillStyle   = ob.shape.color;
+    ctx.fillRect(pos.x - size * 0.4, pos.y - size * ob.shape.h * 8, size * 0.8, size * ob.shape.h * 8);
+    /* warning stripe */
+    ctx.globalAlpha = .7;
+    ctx.fillStyle = '#fff';
+    ctx.font = `${size * 0.5}px serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(ob.shape.label, pos.x, pos.y);
+    ctx.restore();
   }
 
-  /* ─────────────────── DRAW PARTICLES ─────────── */
+  /* ── Draw coins ── */
+  function drawCoin(c) {
+    const pos  = project(c.lane, c.depth);
+    const size = pos.sc * 52;
+    if (size < 4) return;
+    const bobY = pos.y - size * 1.2 + Math.sin(frame * .08 + c.lane) * 5 * pos.sc;
+    ctx.save();
+    ctx.shadowColor = '#ffe500';
+    ctx.shadowBlur  = 14 * pos.sc;
+    ctx.font = `${size}px serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(c.emoji, pos.x, bobY);
+    ctx.restore();
+  }
+
+  /* ── Draw particles ── */
   function drawParticles() {
     particles.forEach(p => {
       ctx.save();
       ctx.globalAlpha = p.life;
-      ctx.fillStyle   = p.color;
+      ctx.fillStyle = p.color;
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.r * p.life, 0, Math.PI * 2);
       ctx.fill();
@@ -399,145 +351,132 @@
     });
   }
 
-  /* ─────────────────── COLLISION ─────────────── */
-  function collides(ax, ay, aw, ah, bx, by, bw, bh) {
-    return ax < bx + bw && ax + aw > bx &&
-           ay < by + bh && ay + ah > by;
-  }
-
-  function checkCollisions() {
-    const cx  = CHAR_X - CHAR_W / 2 + 6;
-    const ch  = char.isSlide ? CHAR_H * 0.5 : CHAR_H;
-    const cy  = char.isSlide ? GROUND_Y - ch : char.y;
-
-    // vs obstacles
-    obstacles = obstacles.filter(ob => {
-      if (ob.x + ob.w < -20) return false;
-      // If it's a low bar, player must slide
-      if (ob.low && !char.isSlide && !char.isJump) {
-        if (collides(cx, cy, CHAR_W - 12, ch - 8, ob.x, ob.y, ob.w, ob.h)) {
-          takeHit();
-          burst(cx + CHAR_W / 2, cy + ch / 2, '#ff4444');
-          return false;
-        }
-      } else if (!ob.low) {
-        if (collides(cx, cy + 10, CHAR_W - 12, ch - 12, ob.x, ob.y, ob.w, ob.h)) {
-          takeHit();
-          burst(cx + CHAR_W / 2, cy + ch / 2, '#ff4444');
-          return false;
-        }
-      }
-      return true;
-    });
-
-    // vs coins
-    coins = coins.filter(c => {
-      const t = Date.now() / 600;
-      const bobY = c.y + Math.sin(t + c.bob) * 6;
-      if (collides(cx, cy, CHAR_W, ch, c.x - c.r, bobY - c.r, c.r * 2, c.r * 2)) {
-        score += c.points;
-        updateHUD();
-        burst(c.x, bobY, '#ffe500', 8);
-        scorePop(c.x, bobY, '+' + c.points);
-        return false;
-      }
-      return c.x + c.r > -10;
-    });
-  }
-
-  /* ─────────────────── DRAW LIVES HUD ─────────── */
+  /* ── Lives display (inside canvas) ── */
   function drawLives() {
     ctx.save();
-    ctx.font = '14px serif';
+    ctx.font = '28px serif';
+    ctx.textBaseline = 'top';
     for (let i = 0; i < 3; i++) {
-      ctx.globalAlpha = i < lives ? 1 : 0.25;
-      ctx.fillText('❤️', 14 + i * 20, 96);
+      ctx.globalAlpha = i < lives ? 1 : 0.2;
+      ctx.fillText('❤️', 16 + i * 34, 150);
     }
     ctx.restore();
   }
 
-  /* ─────────────────── DISTANCE SCORE ─────────── */
-  function drawDistanceTick() {
-    if (frameCount % 6 === 0) {
-      score++;
-      if (frameCount % 60 === 0) updateHUD();
-    }
+  /* ── Collision detection ── */
+  function checkCollisions() {
+    obstacles.forEach(ob => {
+      if (!ob.alive) return;
+      if (ob.depth > 0.05) return;
+      if (ob.lane !== playerLane) return;
+      if (playerJump > 20) return; // jumped over
+      ob.alive = false;
+      if (invincible === 0) {
+        lives = Math.max(0, lives - 1);
+        invincible = 80;
+        if (lives === 0) { lives = 3; score = Math.max(0, score - 50); }
+        updateHUD();
+        const pos = project(playerLane, 0);
+        burst(pos.x, GND - 20, '#ff4444');
+      }
+    });
+
+    coins.forEach(c => {
+      if (!c.alive) return;
+      if (c.depth > 0.05) return;
+      if (c.lane !== playerLane) return;
+      c.alive = false;
+      score += c.pts;
+      updateHUD();
+      const pos = project(c.lane, 0);
+      burst(pos.x, GND - 60, '#ffe500', 8);
+      scorePop(pos.x, GND - 80, '+' + c.pts);
+    });
   }
 
-  /* ─────────────────── MAIN LOOP ─────────────── */
+  /* ── Main loop ── */
   function loop() {
     if (!running) return;
     requestAnimationFrame(loop);
-    frameCount++;
+    frame++;
 
-    // Ramp speed gently
-    speed = BASE_SPEED + Math.min(frameCount / 1200, 3.5);
+    /* Speed ramp */
+    speed = 0.012 + Math.min(frame / 8000, 0.010);
 
-    // ── Physics ──
-    if (char.isJump) {
-      char.y  += char.vy;
-      char.vy += GRAVITY;
-      if (char.y >= GROUND_Y - CHAR_H) {
-        resetCharY();
-      }
-    }
-    if (char.isSlide) {
-      char.slideT--;
-      if (char.slideT <= 0) char.isSlide = false;
+    /* Physics */
+    if (playerJump > 0 || jumpVel < 0) {
+      jumpVel += 1.1;
+      playerJump = Math.max(0, playerJump - jumpVel);
+      if (playerJump === 0) jumpVel = 0;
     }
     if (invincible > 0) invincible--;
 
-    // ── Spawn ──
+    /* Spawn */
     spawnCD--;
     if (spawnCD <= 0) {
-      spawnNext();
-      spawnCD = Math.max(38, 80 - Math.floor(frameCount / 200));
+      if (Math.random() < 0.55) spawnObstacle(); else spawnCoin();
+      spawnCD = Math.max(35, 70 - Math.floor(frame / 300));
     }
 
-    // ── Move obstacles + coins ──
-    obstacles.forEach(ob => { ob.x -= speed; });
-    coins.forEach(c     => { c.x  -= speed; });
+    /* Move */
+    obstacles.forEach(ob => { ob.depth -= speed; });
+    coins.forEach(c     => { c.depth  -= speed; });
 
-    // ── Particles ──
-    particles = particles.filter(p => {
-      p.x += p.vx; p.y += p.vy; p.vy += 0.18;
-      p.life -= p.decay;
-      return p.life > 0;
-    });
+    /* Particles */
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.x += p.vx; p.y += p.vy; p.vy += 0.2;
+      p.life -= p.dec;
+      if (p.life <= 0) particles.splice(i, 1);
+    }
 
-    // ── Collisions ──
+    /* Remove dead */
+    for (let i = obstacles.length - 1; i >= 0; i--)
+      if (!obstacles[i].alive || obstacles[i].depth < -0.02) obstacles.splice(i, 1);
+    for (let i = coins.length - 1; i >= 0; i--)
+      if (!coins[i].alive || coins[i].depth < -0.02) coins.splice(i, 1);
+
+    /* Auto score */
+    if (frame % 5 === 0) { score++; if (frame % 60 === 0) updateHUD(); }
+
+    /* Collisions */
     checkCollisions();
-    drawDistanceTick();
 
-    // ── Draw everything ──
-    drawBG();
-    drawCoins();
-    drawObstacles();
-    drawChar();
+    /* ── DRAW ── */
+    ctx.clearRect(0, 0, CW, CH);
+    drawSky();
+    drawStars();
+    drawCity();
+    drawGround();
+
+    /* Coins (far first) */
+    coins.slice().sort((a,b) => b.depth - a.depth).forEach(drawCoin);
+
+    /* Obstacles (far first) */
+    obstacles.slice().sort((a,b) => b.depth - a.depth).forEach(drawObstacle);
+
+    drawCharacter();
     drawParticles();
     drawLives();
   }
 
-  /* ─────────────────── PUBLIC API ─────────────── */
+  /* ── Inject score HUD into viewport ── */
+  const vp = document.getElementById('videoViewport');
+  if (vp && !document.getElementById('scoreHUD')) {
+    vp.insertAdjacentHTML('beforeend',
+      `<div id="scoreHUD"><div id="scoreLabel">SCORE</div><div id="scoreValue">0</div></div>`);
+  }
+
+  /* ── Public API ── */
   window.BallGame = {
-    start()    { running = true;  loop(); },
+    start()    { running = true; loop(); },
     stop()     { running = false; },
-    reset()    { score = 0; lives = 3; frameCount = 0; obstacles = []; coins = []; particles = [];
-                 speed = BASE_SPEED; resetCharY(); updateHUD(); },
+    reset()    { score = 0; lives = 3; frame = 0; speed = 0.012;
+                 obstacles.length = 0; coins.length = 0; particles.length = 0;
+                 playerLane = 0; playerJump = 0; jumpVel = 0; invincible = 0;
+                 spawnCD = 60; updateHUD(); },
     getScore() { return score; },
   };
-
-  // hint text overlay (first 4 seconds)
-  setTimeout(() => {
-    const h = document.createElement('div');
-    h.style.cssText = `position:absolute;bottom:${(H - GROUND_Y + 30)}px;left:50%;
-      transform:translateX(-50%);color:rgba(255,255,255,.55);font-size:11px;
-      font-weight:700;z-index:6;pointer-events:none;letter-spacing:1px;
-      text-shadow:0 1px 4px #000;white-space:nowrap`;
-    h.textContent = 'TAP / SPACE to jump  •  ↓ to slide';
-    document.getElementById('app')?.appendChild(h);
-    setTimeout(() => h.remove(), 4000);
-  }, 800);
 
   window.BallGame.start();
 
