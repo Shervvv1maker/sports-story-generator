@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>Sports Story Generator</title>
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+
+  <!-- ===== APP SHELL ===== -->
+  <div id="app">
+
+    <!-- Background: Addictive catch-the-balls game on canvas -->
+    <canvas id="bgCanvas"></canvas>
+
+    <!-- Gradient vignette over the canvas -->
+    <div id="vignette"></div>
+
+    <!-- ===== SPORT SELECTOR BAR ===== -->
+    <div id="sportBar">
+      <button class="sportBtn active" data-sport="all">🏆 All</button>
+      <button class="sportBtn" data-sport="football">🏈 NFL</button>
+      <button class="sportBtn" data-sport="basketball">🏀 NBA</button>
+      <button class="sportBtn" data-sport="baseball">⚾ MLB</button>
+      <button class="sportBtn" data-sport="soccer">⚽ Soccer</button>
+      <button class="sportBtn" data-sport="golf">⛳ Golf</button>
+      <button class="sportBtn" data-sport="f1">🏎️ F1</button>
+    </div>
+
+    <!-- ===== VIDEO OVERLAY ===== -->
+    <div id="videoOverlay">
+
+      <!-- Sport badge top-left -->
+      <div id="sportBadge">
+        <span id="badgeEmoji">🏆</span>
+        <span id="badgeName">Sports</span>
+        <span id="badgeYear"></span>
+      </div>
+
+      <!-- Live / Source chip top-right -->
+      <div id="sourceChip">
+        <span id="sourceLabel">📰 Featured Story</span>
+      </div>
+
+      <!-- Title card -->
+      <div id="titleCard">
+        <div id="storyTitle">Press Generate to Start</div>
+      </div>
+
+      <!-- Caption bar — synced to TTS -->
+      <div id="captionBar">
+        <div id="captionText"></div>
+      </div>
+
+      <!-- Progress bar -->
+      <div id="progressWrap">
+        <div id="progressBar"></div>
+        <div id="timeLabel">0:00 / 1:00</div>
+      </div>
+
+      <!-- Controls -->
+      <div id="controls">
+        <button id="generateBtn" class="ctaBtn">⚡ Generate Story</button>
+        <button id="playPauseBtn" class="iconBtn" disabled>▶</button>
+        <button id="replayBtn"    class="iconBtn" disabled>↺</button>
+        <button id="muteBtn"      class="iconBtn">🔊</button>
+        <button id="skipBtn"      class="iconBtn" disabled>⏭</button>
+      </div>
+
+    </div>
+
+    <!-- ===== GAME SCORE HUD ===== -->
+    <div id="scoreHUD">
+      <div id="scoreLabel">SCORE</div>
+      <div id="scoreValue">0</div>
+    </div>
+
+    <!-- ===== LOADING SCREEN ===== -->
+    <div id="loadingScreen">
+      <div class="spinner"></div>
+      <div id="loadingText">Fetching story…</div>
+    </div>
+
+  </div>
+
+  <!-- Scripts — order matters -->
+  <script src="js/stories.js"></script>
+  <script src="js/game.js"></script>
+  <script src="js/tts.js"></script>
+  <script src="js/app.js"></script>
+
+</body>
+</html>
