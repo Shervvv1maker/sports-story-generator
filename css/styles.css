@@ -1,6 +1,8 @@
 /* ============================================================
    SPORTS STORY GENERATOR — Full Website Styles
-   Dark creator-tool UI + 9:16 phone preview + video overlay
+   Dark creator-tool UI + 9:16 phone preview
+   All video overlays (Reddit card, captions, progress) are
+   now drawn directly on the canvas — not in HTML.
    ============================================================ */
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -16,9 +18,8 @@
   --muted:     rgba(255,255,255,.45);
   --radius:    12px;
   --font:      'Inter', system-ui, -apple-system, sans-serif;
-  --cap-font:  'Inter', 'Arial Black', Impact, sans-serif;
 
-  /* sport colours */
+  /* sport colour (overridden per sport) */
   --sport-col: #ff6b35;
 }
 
@@ -52,7 +53,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   grid-template-columns: auto 1fr;
   gap: 0;
   align-items: start;
-  padding: 32px 28px 40px;
+  padding: 32px 28px 60px;
   max-width: 1100px;
   margin: 0 auto;
   width: 100%;
@@ -103,7 +104,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   margin: 10px auto 2px;
 }
 
-/* Video viewport — crops the canvas */
+/* Video viewport */
 #videoViewport {
   position: relative;
   width: 260px;
@@ -113,7 +114,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   background: #000;
 }
 
-/* Canvas is 540×960 native, scaled 50% via CSS to 270×480 then centred */
+/* Canvas is 540×960 native, CSS-scaled to fit 260px wide */
 #bgCanvas {
   position: absolute;
   top: 0; left: 50%;
@@ -126,115 +127,24 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   display: block;
 }
 
-/* Vignette */
-#vignette {
-  position: absolute; inset: 0; z-index: 1;
-  pointer-events: none;
-  background: linear-gradient(
-    to bottom,
-    rgba(0,0,0,.55) 0%,
-    rgba(0,0,0,.02) 28%,
-    rgba(0,0,0,.00) 50%,
-    rgba(0,0,0,.45) 72%,
-    rgba(0,0,0,.95) 100%
-  );
-}
-
-/* Video overlay (stacked on top of canvas) */
+/* Video overlay (HTML — only used for REC indicator, not captured in video) */
 #videoOverlay {
   position: absolute; inset: 0;
   z-index: 3;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  padding: 42px 10px 10px;
   pointer-events: none;
 }
 
-/* Sport badge */
-#sportBadge {
-  display: flex; align-items: center; gap: 4px;
-  background: var(--sport-col);
-  border-radius: 20px;
-  padding: 3px 9px 3px 6px;
-  font-size: 9px; font-weight: 900;
-  color: #fff; letter-spacing: .5px;
-  text-transform: uppercase;
-  align-self: flex-start;
-  box-shadow: 0 2px 10px rgba(0,0,0,.4);
-  transition: background .3s;
-}
-#badgeYear { opacity: .7; font-weight: 600; }
-
-#sourceChip {
-  position: absolute;
-  top: 42px; right: 10px;
-  background: rgba(0,0,0,.55);
-  border: 1px solid rgba(255,255,255,.12);
-  border-radius: 20px;
-  padding: 3px 8px;
-  font-size: 8px; color: rgba(255,255,255,.75);
-}
-
-/* Bottom group */
-#overlayBottom { display: flex; flex-direction: column; gap: 6px; }
-
-#storyTitleEl {
-  font-size: 10px; font-weight: 900;
-  color: #fff; line-height: 1.3;
-  text-shadow: 0 1px 6px rgba(0,0,0,.9), 0 0 20px rgba(0,0,0,.7);
-}
-
-/* Caption bar — TikTok style */
-#captionBar {
-  background: rgba(0,0,0,.72);
-  border-radius: 8px;
-  padding: 6px 8px;
-  min-height: 40px;
-}
-#captionText {
-  font-family: var(--cap-font);
-  font-size: 10px; font-weight: 900;
-  color: #fff; line-height: 1.5;
-  /* TikTok outline */
-  text-shadow:
-    -1px -1px 0 #000, 1px -1px 0 #000,
-    -1px  1px 0 #000, 1px  1px 0 #000;
-}
-#captionText .cw-active {
-  color: #FFE500;
-  text-shadow:
-    -1px -1px 0 rgba(0,0,0,.7), 1px -1px 0 rgba(0,0,0,.7),
-    -1px  1px 0 rgba(0,0,0,.7), 1px  1px 0 rgba(0,0,0,.7),
-    0 0 10px rgba(255,229,0,.6);
-}
-
-/* Progress bar */
-#progressWrap {
-  display: flex; align-items: center; gap: 6px;
-}
-#progressBar {
-  flex: 1; height: 2px;
-  background: rgba(255,255,255,.15);
-  border-radius: 1px; overflow: hidden;
-}
-#progressFill {
-  height: 100%;
-  background: var(--sport-col);
-  width: 0%;
-  transition: width .25s linear;
-  box-shadow: 0 0 4px var(--sport-col);
-}
-#timeLabel { font-size: 7px; color: rgba(255,255,255,.6); white-space: nowrap; font-weight: 700; }
-
 /* Recording indicator */
 #recIndicator {
-  position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   z-index: 10;
   background: rgba(220,0,0,.85);
   color: #fff;
   font-size: 9px; font-weight: 900;
-  padding: 3px 8px;
+  padding: 4px 10px;
   border-radius: 10px;
   display: flex; align-items: center; gap: 5px;
   letter-spacing: 1px;
@@ -247,7 +157,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 }
 @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
 
-/* Platform row */
+/* Platform selector row */
 #platformRow { display: flex; gap: 8px; }
 .platBtn {
   flex: 1;
@@ -272,7 +182,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 ═══════════════════════════════════════ */
 #controlPanel {
   padding-left: 40px;
-  max-width: 420px;
+  max-width: 440px;
 }
 #controlInner { display: flex; flex-direction: column; gap: 22px; }
 
@@ -284,7 +194,12 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 }
 
 .controlGroup { display: flex; flex-direction: column; gap: 8px; }
-.groupLabel { font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: .8px; text-transform: uppercase; }
+.groupLabel {
+  font-size: 11px; font-weight: 700;
+  color: var(--muted);
+  letter-spacing: .8px;
+  text-transform: uppercase;
+}
 
 /* Sport buttons */
 #sportBar { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -319,11 +234,12 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   appearance: none;
   outline: none;
   transition: border-color .15s;
+  width: 100%;
 }
 .selectInput:focus { border-color: var(--accent); }
+.selectSmall { font-size: 12px; padding: 8px 10px; width: auto; flex-shrink: 0; }
 
 /* Story card */
-#storyCard { }
 #storyCardInner {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -391,18 +307,6 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 }
 .btnGhost:hover:not(:disabled) { border-color: rgba(255,255,255,.3); background: var(--surface); }
 
-/* Tips box */
-#tipsBox {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 14px;
-  display: flex; flex-direction: column; gap: 8px;
-}
-#tipsBox p { font-size: 12px; color: var(--muted); line-height: 1.5; }
-#tipsBox a { color: var(--accent); text-decoration: none; }
-#tipsBox a:hover { text-decoration: underline; }
-
 /* Ghost button (header) */
 .ghostBtn {
   background: var(--surface2);
@@ -415,6 +319,130 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   transition: border-color .15s;
 }
 .ghostBtn:hover { border-color: rgba(255,255,255,.3); }
+
+/* ═══════════════════════════════════════
+   SOCIAL POSTING SECTION
+═══════════════════════════════════════ */
+#socialSection {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+/* Platform post buttons grid */
+#socialBtns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.socialBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  background: var(--surface2);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 13px; font-weight: 700;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: all .15s;
+  white-space: nowrap;
+}
+.socialBtn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(255,107,53,.08);
+}
+.socialBtn:disabled { opacity: .35; cursor: default; }
+.socialIcon { font-size: 16px; line-height: 1; }
+.socialBtnCopy { grid-column: span 2; }
+
+.socialHint {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.5;
+  padding: 2px 0;
+}
+
+/* Schedule row */
+#scheduleWrap { display: flex; flex-direction: column; gap: 8px; }
+#scheduleRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.scheduleInput {
+  flex: 1;
+  min-width: 160px;
+  padding: 8px 10px;
+  font-size: 12px;
+  background: var(--surface2);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  outline: none;
+}
+.scheduleInput:focus { border-color: var(--accent); }
+.scheduleInput::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  opacity: 0.6;
+  cursor: pointer;
+}
+.scheduleConfirm {
+  width: auto;
+  padding: 8px 14px;
+  font-size: 12px;
+  border-radius: var(--radius);
+  white-space: nowrap;
+}
+
+/* Scheduled items list */
+#scheduledList { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.scheduleEmpty { font-size: 12px; color: var(--muted); font-style: italic; }
+.scheduleItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.sched-icon { font-size: 18px; flex-shrink: 0; }
+.sched-info { flex: 1; min-width: 0; }
+.sched-title {
+  font-size: 12px; font-weight: 700;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.sched-time { font-size: 10px; color: var(--muted); margin-top: 2px; }
+.sched-cancel {
+  background: rgba(255,60,60,.15);
+  border: 1px solid rgba(255,60,60,.25);
+  border-radius: 6px;
+  color: rgba(255,100,100,.9);
+  font-size: 11px; font-weight: 700;
+  padding: 3px 8px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background .15s;
+}
+.sched-cancel:hover { background: rgba(255,60,60,.3); }
+
+/* Tips box */
+#tipsBox {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+#tipsBox p { font-size: 12px; color: var(--muted); line-height: 1.5; }
+#tipsBox a { color: var(--accent); text-decoration: none; }
+#tipsBox a:hover { text-decoration: underline; }
 
 /* ═══════════════════════════════════════
    SETTINGS MODAL
@@ -455,7 +483,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 #keyStatus { font-size: 12px; color: #4ade80; font-weight: 700; min-height: 18px; }
 
 /* ═══════════════════════════════════════
-   SPORT ACCENT COLOURS
+   SPORT ACCENT COLOURS (control panel)
 ═══════════════════════════════════════ */
 body[data-sport="football"]   { --sport-col: #a0522d; }
 body[data-sport="basketball"] { --sport-col: #ff6b00; }
@@ -465,35 +493,12 @@ body[data-sport="golf"]       { --sport-col: #2e8b57; }
 body[data-sport="f1"]         { --sport-col: #e8002d; }
 
 /* ═══════════════════════════════════════
-   SCORE HUD (inside video viewport)
-═══════════════════════════════════════ */
-#scoreHUD {
-  position: absolute;
-  top: 46px; right: 8px;
-  z-index: 4; pointer-events: none;
-  text-align: center;
-}
-#scoreLabel { font-size: 6px; font-weight: 900; letter-spacing: 2px; color: rgba(255,255,255,.4); }
-#scoreValue { font-size: 16px; font-weight: 900; color: #FFE500; text-shadow: 0 0 10px rgba(255,229,0,.5); line-height: 1; }
-
-/* Score pop-up */
-.scorePop {
-  position: fixed; z-index: 999;
-  font-size: 14px; font-weight: 900;
-  color: #FFE500;
-  text-shadow: 0 1px 4px rgba(0,0,0,.7);
-  pointer-events: none;
-  animation: popUp .9s ease-out forwards;
-}
-@keyframes popUp { 0%{opacity:1;transform:translateY(0) scale(1.2)} 100%{opacity:0;transform:translateY(-50px) scale(.8)} }
-
-/* ═══════════════════════════════════════
    RESPONSIVE
 ═══════════════════════════════════════ */
 @media (max-width: 720px) {
   #siteMain {
     grid-template-columns: 1fr;
-    padding: 20px 16px 40px;
+    padding: 20px 16px 50px;
     gap: 28px;
   }
   #controlPanel { padding-left: 0; max-width: 100%; }
@@ -501,4 +506,9 @@ body[data-sport="f1"]         { --sport-col: #e8002d; }
   #phoneWrap { width: 240px; }
   #videoViewport { width: 222px; height: 395px; }
   #bgCanvas { transform: translateX(-50%) scale(0.412); }
+}
+
+@media (max-width: 400px) {
+  #socialBtns { grid-template-columns: 1fr; }
+  .socialBtnCopy { grid-column: span 1; }
 }

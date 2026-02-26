@@ -6,7 +6,7 @@
   <title>Sports Story Generator</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400;0,14..32,600;0,14..32,700;0,14..32,900;1,14..32,700&display=swap" rel="stylesheet"/>
   <link rel="stylesheet" href="css/styles.css"/>
 </head>
 <body>
@@ -41,41 +41,14 @@
 
         <!-- The actual video viewport -->
         <div id="videoViewport">
-          <!-- Canvas renders at 540×960, CSS scales to preview size -->
+          <!-- Canvas renders at 540×960 — game background + all overlays drawn here -->
           <canvas id="bgCanvas" width="540" height="960"></canvas>
 
-          <!-- Vignette -->
-          <div id="vignette"></div>
-
-          <!-- Overlays (sport badge, title, captions, progress) -->
+          <!-- Recording indicator (HTML only — not captured in video) -->
           <div id="videoOverlay">
-
-            <div id="sportBadge">
-              <span id="badgeEmoji">🏆</span>
-              <span id="badgeName">Sport</span>
-              <span id="badgeYear"></span>
+            <div id="recIndicator" class="hidden">
+              <span class="recDot"></span> REC
             </div>
-
-            <div id="sourceChip"><span id="sourceLabel">📰 Sports History</span></div>
-
-            <div id="overlayBottom">
-              <div id="storyTitleEl">Press Generate to begin</div>
-
-              <div id="captionBar">
-                <div id="captionText"></div>
-              </div>
-
-              <div id="progressWrap">
-                <div id="progressBar"><div id="progressFill"></div></div>
-                <div id="timeLabel">0:00 / 0:00</div>
-              </div>
-            </div>
-
-          </div><!-- /videoOverlay -->
-
-          <!-- Recording indicator -->
-          <div id="recIndicator" class="hidden">
-            <span class="recDot"></span> REC
           </div>
         </div><!-- /videoViewport -->
 
@@ -85,15 +58,9 @@
 
       <!-- Platform selector -->
       <div id="platformRow">
-        <button class="platBtn active" data-plat="tiktok">
-          <span>TikTok</span>
-        </button>
-        <button class="platBtn" data-plat="reels">
-          <span>Reels</span>
-        </button>
-        <button class="platBtn" data-plat="shorts">
-          <span>Shorts</span>
-        </button>
+        <button class="platBtn active" data-plat="tiktok">TikTok</button>
+        <button class="platBtn" data-plat="reels">Reels</button>
+        <button class="platBtn" data-plat="shorts">Shorts</button>
       </div>
     </section>
 
@@ -151,11 +118,53 @@
           <button id="downloadBtn" class="btn btnGhost"    disabled>⬇ Download</button>
         </div>
 
+        <!-- ── SOCIAL POSTING ── -->
+        <div id="socialSection" class="controlGroup">
+          <label class="groupLabel">Post Your Video</label>
+
+          <!-- Platform post buttons -->
+          <div id="socialBtns">
+            <button class="socialBtn" id="postTikTok"  disabled>
+              <span class="socialIcon">📱</span><span>TikTok</span>
+            </button>
+            <button class="socialBtn" id="postYouTube" disabled>
+              <span class="socialIcon">▶</span><span>YouTube</span>
+            </button>
+            <button class="socialBtn" id="postInsta"   disabled>
+              <span class="socialIcon">📸</span><span>Instagram</span>
+            </button>
+            <button class="socialBtn socialBtnCopy" id="copyCaptionBtn" disabled>
+              <span class="socialIcon">📋</span><span>Copy Caption</span>
+            </button>
+          </div>
+
+          <p class="socialHint">Downloads your video then opens the platform's upload page.</p>
+
+          <!-- Schedule -->
+          <div id="scheduleWrap">
+            <label class="groupLabel" style="margin-top:6px">Schedule Post</label>
+            <div id="scheduleRow">
+              <select id="schedulePlatSel" class="selectInput selectSmall">
+                <option value="tiktok">TikTok</option>
+                <option value="youtube">YouTube</option>
+                <option value="instagram">Instagram</option>
+              </select>
+              <input type="datetime-local" id="scheduleInput" class="textInput scheduleInput"/>
+              <button id="scheduleBtn" class="btn btnGhost scheduleConfirm" disabled>⏰ Schedule</button>
+            </div>
+          </div>
+
+          <!-- Scheduled list -->
+          <div id="scheduledList">
+            <p class="scheduleEmpty">No posts scheduled.</p>
+          </div>
+        </div>
+
         <!-- Tips -->
         <div id="tipsBox">
-          <p>🎮 <b>While recording:</b> Click preview to jump in the game!</p>
-          <p>📱 Output: <b>9:16 vertical, 540×960</b> — ready for TikTok, Reels &amp; Shorts.</p>
-          <p>🔑 For the human British voice, add your free <a href="https://elevenlabs.io" target="_blank" rel="noopener">ElevenLabs API key</a> via ⚙️ above.</p>
+          <p>🎮 <b>Click the preview</b> to jump in the Minecraft game!</p>
+          <p>📱 Output: <b>9:16 vertical (540×960)</b> — ready for TikTok, Reels &amp; Shorts.</p>
+          <p>🔑 For human British AI voice, add your free <a href="https://elevenlabs.io" target="_blank" rel="noopener">ElevenLabs API key</a> via ⚙️ above.</p>
         </div>
 
       </div>
@@ -175,23 +184,24 @@
     </div>
     <p class="modalDesc">
       Get a <b>free key</b> at <a href="https://elevenlabs.io/sign-up" target="_blank" rel="noopener">elevenlabs.io</a>
-      (10,000 characters/month free — about 30–40 story videos).
-      Without a key, the browser's built-in TTS voice is used instead.
+      (10,000 chars/month free — about 30–40 story videos).
+      Without a key, the browser's built-in TTS voice is used.
     </p>
     <input id="apiKeyInput" class="textInput" type="password" placeholder="sk-...your-api-key..."/>
     <div class="modalActions">
-      <button id="saveKeyBtn"   class="btn btnPrimary">Save Key</button>
-      <button id="clearKeyBtn"  class="btn btnGhost">Clear Key</button>
+      <button id="saveKeyBtn"  class="btn btnPrimary">Save Key</button>
+      <button id="clearKeyBtn" class="btn btnGhost">Clear Key</button>
     </div>
     <div id="keyStatus"></div>
   </div>
 </div>
 
-<!-- Scripts -->
+<!-- Scripts (load order matters) -->
 <script src="js/stories.js"></script>
 <script src="js/game.js"></script>
 <script src="js/elevenlabs.js"></script>
 <script src="js/recorder.js"></script>
+<script src="js/social.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

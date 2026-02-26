@@ -161,7 +161,7 @@ window.ElevenLabs = (function () {
        Returns a controller: { stop() }
     */
     async speak(text, opts = {}) {
-      const { voiceId, onWord, onProgress, onDone, audioCtx } = opts;
+      const { voiceId, onWord, onProgress, onDone, audioCtx, dest } = opts;
       let stopped = false;
       const ctrl  = { stop() { stopped = true; } };
 
@@ -173,7 +173,8 @@ window.ElevenLabs = (function () {
 
           const source = audioCtx.createBufferSource();
           source.buffer = audioBuffer;
-          source.connect(audioCtx.destination);
+          source.connect(audioCtx.destination);   // speakers
+          if (dest) source.connect(dest);           // also capture for recording
 
           const duration = audioBuffer.duration;
           const startAt  = audioCtx.currentTime;
